@@ -1,0 +1,158 @@
+
+# Use the code below to import and format my dataset, split the dataset into training and test, and outputted some feature correlations to target metrics and 
+# correlations between features. Then I made a simple linear regression algorithm to output OLS summary metrics for further variable analysis. I chose some variables
+# based on feature correlation to target > .02 and built a random forest regression algorithm.
+# SOME NOTES: the dataset is clean and there were no missing values. Didn't do outlier analysis on this go around. Bc of personal preference, I like to export metrics
+# Excel and do analysis theere instead of the kernel
+
+
+
+
+import os
+import gc 
+import pandas as pd
+import numpy as  np
+import matplotlib.pyplot as plt 
+import seaborn as sns
+import statsmodels.formula.api as smf
+
+ubiquant_data = pd.read_csv('/Users/john_rabovich/Desktop/Data science/kaggle/train.csv', index_col = 'row_id' )
+
+dataframe = ubiquant_data
+dataframe.dropna(subset =['target'], axis = 0,inplace = True )
+
+#doesnt appear to be any missing variables 02/12/22
+missing_val_count_by_column = (dataframe.isnull().sum())
+print(missing_val_count_by_column[missing_val_count_by_column > 0])
+
+
+
+#Separate features from target and separate into train test split
+
+
+X = dataframe.drop(['target'], axis = 1)
+y = dataframe['target']
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_valid, y_train, y_valid = train_test_split(X, y,
+                                                     train_size = 0.8,
+                                                     test_size = 0.2,
+                                                     random_state= 0)
+
+# 02/12/2022 expoerted feature summary to csv on desktop and added to my worksheet
+# features_summary = X_train.describe()
+# features_summary.to_csv('/Users/john_rabovich/Desktop/Data science/kaggle/features_summary.csv')
+
+# 02/15/22 im going to work on feature correlation now 
+feature_corr_2_target = X_train.apply(lambda x: x.corr(y_train))
+
+feature_corr_2_target.to_csv('/Users/john_rabovich/Desktop/Data science/kaggle/feature_corr_2_target.csv')
+
+feature_corr_2_target.columns = ['features','corr2target']
+
+
+#making corr matrix of features 
+
+# adding training target var to X_train to do data viz 02/15/2022
+# 02/16/22 did analysis on top vars(corr 2 target > 0) and put them in new extract training set
+
+full_training_set = X_train[['f_119','f_270','f_76','f_93','f_264','f_225','f_145','f_17','f_150','f_169','f_194','f_5',	
+                            'f_109','f_153','f_174','f_88','f_114','f_181','f_29','f_162','f_192','f_72','f_2',	
+                            'f_33',	'f_290','f_94','f_266','f_26','f_103','f_263','f_125','f_112','f_177']]
+
+full_training_set['trgt'] = y_train
+
+#02/16/2022 made corr matrix of features in training set and exported to excel for analysis
+corr_matrix = full_training_set[['f_119','f_270','f_76','f_93','f_264','f_225','f_145','f_17','f_150','f_169','f_194','f_5',	
+                            'f_109','f_153','f_174','f_88','f_114','f_181','f_29','f_162','f_192','f_72','f_2',	
+                            'f_33',	'f_290','f_94','f_266','f_26','f_103','f_263','f_125','f_112','f_177']].corr()
+
+corr_matrix.to_csv('/Users/john_rabovich/Desktop/Data science/kaggle/corr_matrix.csv')
+
+
+
+
+# data viz using relationship plots 02/16/2022
+#sns.relplot(x ='f_119', y = 'trgt', data = full_training_set)
+
+# 02/21/22 made the below code to automatically output all the pred vs trgt relationship plots 
+# 03/05/22 changed the blow graph code from relplot to regplot bc i want the regression line
+# 03/07/22 found code to output my graphs to pdf
+from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.pyplot as plt
+
+pp = PdfPages('foo.pdf')
+
+def output_graph(predictor):
+    return sns.regplot(x =predictor, y = 'trgt', data = full_training_set)
+
+for col in full_training_set:
+    output_graph(col)
+    plt.savefig(f"{col}.pdf")
+
+
+#03/07/21 think i have the proper code below for outputting the stuffs to pdf, need to make the plot and save fig in same script
+sns.regplot(x ='f_270', y = 'trgt', data = full_training_set)
+plt.savefig("pdf_test.pdf")
+
+
+
+#02/23/22 importing ML libraries and models, undecided if i use linear regression
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor 
+
+
+
+x_vars = ['f_119','f_270','f_76','f_93','f_264','f_225','f_145','f_17','f_150','f_169','f_194','f_5',	
+                            'f_109','f_153','f_174','f_88','f_114','f_181','f_29','f_162','f_192','f_72','f_2',	
+                            'f_33',	'f_290','f_94','f_266','f_26','f_103','f_263','f_125','f_112','f_177']
+
+regressor_rf = RandomForestRegressor(n_estimators = 100, random_state = 0)
+regressor_rf.fit(full_training_set[x_vars] ,full_training_set['trgt'])
+
+yhat_rf = regressor_rf.predict(X_valid[x_vars])
+# evaluate predictions
+mae = mean_absolute_error(y_valid, yhat_rf)
+mse = mean_squared_error(y_valid,yhat_rf)
+print(mae)
+print(mse)
+
+# 03/01/22 used below code to find best features using linear regression OLS criteria
+pd.Series(regressor_rf.feature_importances_, x_vars).sort_values(ascending = False)
+
+#03/01/22 making linear regression model to get OLS output
+import statsmodels.formula.api as smf
+
+# to make x_vars list into string that could be input to ols formula
+lin_reg_predictors = ''
+for x in x_vars:
+    lin_reg_predictors += x + ' + '
+
+#03/01/22 below code formatted my x_ vars list into a string that could be read by linear regression algo
+ols_model = smf.ols(formula ='trgt ~ f_119 + f_270 + f_76 + f_93 + f_264 + f_225 + f_145 + f_17 + f_150 + f_169 + f_194 + f_5 + f_109 + f_153 + f_174 + f_88 + f_114 + f_181 + f_29 + f_162 + f_192 + f_72 + f_2 + f_33 + f_290 + f_94 + f_266 + f_26 + f_103 + f_263 + f_125 + f_112 + f_177', data = full_training_set )
+
+#03/05/22 output OLS metrcis
+results = ols_model.fit()
+ols_metrics_b1_xvars = results.summary2()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
