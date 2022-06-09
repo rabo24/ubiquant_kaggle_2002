@@ -1,0 +1,123 @@
+# 06/10/22 Made a neural network regression model for the Kaggle Ubiquant  2022 competition. Its pretty simple as far as neural nets go and it didnt score 
+# particularly well but I just put the template here for easy access for future projects 
+
+
+
+
+import os
+import gc 
+import pandas as pd
+import numpy as  np
+import matplotlib.pyplot as plt 
+import seaborn as sns
+import statsmodels.formula.api as smf
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
+from sklearn import metrics
+
+
+import tensorflow as tf
+
+from tensorflow import keras
+from tensorflow.keras import layers
+
+print(tf.__version__)
+
+ubiquant_data = pd.read_csv('/Users/john_rabovich/Desktop/Data science/kaggle/train.csv', index_col = 'row_id', nrows=4000000 )
+
+dataframe = ubiquant_data
+dataframe.dropna(subset =['target'], axis = 0,inplace = True )
+
+#doesnt appear to be any missing variables 02/12/22
+# missing_val_count_by_column = (dataframe.isnull().sum())
+# print(missing_val_count_by_column[missing_val_count_by_column > 0])
+# print(missing_val_count_by_column[missing_val_count_by_column > 260])
+
+
+#Separate features from target and separate into train test split
+
+
+X = dataframe.drop(['target'], axis = 1)
+y = dataframe['target']
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_valid, y_train, y_valid = train_test_split(X, y,
+                                                     train_size = 0.8,
+                                                     test_size = 0.2,
+                                                     random_state= 0)
+
+X_train.describe()
+# 05/21/22 adding the normalization layer here, not sure if i need it 
+# create layer
+normalizer = tf.keras.layers.Normalization(axis=-1)
+
+#fit preprocessing layer to the data 
+normalizer.adapt(np.array(X_train))
+
+
+# 05/21/22 going to tattempt to create multiple feature nerual network
+
+linear_model = tf.keras.Sequential([
+    normalizer,
+    layers.Dense(units=1)
+])
+
+# just used below 2 lines of code to mess around and see what it looks like
+linear_model.predict(X_train)
+linear_model.layers[1].kernel
+
+
+
+# 05/21/22 configuring model below. im taking 20% of the validation set from the training set. need to calculate 
+# my  test results later on in the way im used 
+
+linear_model.compile(
+    optimizer=tf.optimizers.Adam(learning_rate=0.1),
+    loss='mean_absolute_error')
+
+
+
+
+# %%time
+history = linear_model.fit(
+    X_train,
+    y_train,
+    epochs=100,
+    # Suppress logging.
+    verbose=0,
+    # Calculate validation results on 20% of the training data.
+    validation_split = 0.2)
+
+
+
+#05/22/22 below is the function to make the plot loss graph, the plt labeles are meaningless
+#not exactly sure what the graph shows, 
+def plot_loss(history):
+  plt.plot(history.history['loss'], label='loss')
+  plt.plot(history.history['val_loss'], label='val_loss')
+  plt.ylim([0, 10])
+  plt.xlabel('Epoch')
+  plt.ylabel('Error [MPG]')
+  plt.legend()
+  plt.grid(True)
+
+plot_loss(history)
+
+
+#05/22/22 storing test results of linear nn
+test_results = {}
+test_results['linear_model'] = linear_model.evaluate(
+    X_valid, y_valid, verbose=0)
+
+
+linear_model.fit(X_train,y_train)
+
+yhat_lr = linear_model.predict(X_valid)
+print(metrics.r2_score(y_valid,yhat_lr))
+mae = mean_absolute_error(y_valid, yhat_lr)
+mse = mean_squared_error(y_valid,yhat_lr)
+print(mae)
+print(mse)
+
+print(metrics.mean_squared_log_error(y_valid,yhat_lr))
